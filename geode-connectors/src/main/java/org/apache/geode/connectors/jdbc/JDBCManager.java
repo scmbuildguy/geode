@@ -19,14 +19,11 @@ import java.sql.DatabaseMetaData;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
-import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
@@ -197,6 +194,7 @@ public class JDBCManager {
     // }
     // });
     String query = getQueryString(tableName, columnList, operation);
+    System.out.println("query=" + query);
     Connection con = getConnection();
     try {
       return con.prepareStatement(query);
@@ -221,7 +219,7 @@ public class JDBCManager {
         continue;
       }
       String columnName = mapFieldNameToColumnName(fieldName, tableName);
-      if (columnName.equals(keyColumnName)) {
+      if (columnName.equalsIgnoreCase(keyColumnName)) {
         continue;
       }
       Object columnValue = value.getField(fieldName);
@@ -251,16 +249,31 @@ public class JDBCManager {
       Connection con = getConnection();
       try {
         DatabaseMetaData metaData = con.getMetaData();
-        ResultSet primaryKeys = metaData.getPrimaryKeys(null, null, k);
+        ResultSet tablesRS = metaData.getTables(null, null, "%", null);
+        String realTableName = null;
+        while (tablesRS.next()) {
+          String name = tablesRS.getString("TABLE_NAME");
+          if (name.equalsIgnoreCase(k)) {
+            if (realTableName != null) {
+              throw new IllegalStateException("Duplicate tables that match region name");
+            }
+            realTableName = name;
+          }
+        }
+        if (realTableName == null) {
+          throw new IllegalStateException("no table was found that matches " + k);
+        }
+        ResultSet primaryKeys = metaData.getPrimaryKeys(null, null, realTableName);
         if (!primaryKeys.next()) {
           throw new IllegalStateException(
               "The table " + k + " does not have a primary key column.");
         }
-        if (!primaryKeys.isLast()) {
+        String key = primaryKeys.getString("COLUMN_NAME");
+        if (primaryKeys.next()) {
           throw new IllegalStateException(
               "The table " + k + " has more than one primary key column.");
         }
-        return primaryKeys.getString("COLUMN_NAME");
+        return key;
       } catch (SQLException e) {
         handleSQLException(e);
         return null; // never reached
@@ -275,5 +288,33 @@ public class JDBCManager {
   private String getTableName(Region region) {
     // TODO: check config for mapping
     return region.getName();
+  }
+
+  private void printResultSet(ResultSet rs) {
+    System.out.println("Printing ResultSet:");
+    try {
+      int size = 0;
+      ResultSetMetaData rsmd = rs.getMetaData();
+      int columnsNumber = rsmd.getColumnCount();
+      while (rs.next()) {
+        size++;
+        for (int i = 1; i <= columnsNumber; i++) {
+          if (i > 1)
+            System.out.print(",  ");
+          String columnValue = rs.getString(i);
+          System.out.print(rsmd.getColumnName(i) + ": " + columnValue);
+        }
+        System.out.println("");
+      }
+      System.out.println("size=" + size);
+    } catch (SQLException ex) {
+      System.out.println("Exception while printing result set" + ex);
+    } finally {
+      try {
+        rs.beforeFirst();
+      } catch (SQLException e) {
+        System.out.println("Exception while calling beforeFirst" + e);
+      }
+    }
   }
 }

@@ -17,11 +17,7 @@ package org.apache.geode.connectors.jdbc;
 import static org.apache.geode.distributed.ConfigurationProperties.MCAST_PORT;
 import static org.assertj.core.api.Assertions.*;
 
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.ResultSet;
-import java.sql.ResultSetMetaData;
-import java.sql.Statement;
+import java.sql.*;
 import java.util.Properties;
 import java.util.concurrent.TimeUnit;
 
@@ -85,7 +81,7 @@ public class JDBCAsyncWriterIntegrationTest {
     conn = DriverManager.getConnection(connectionURL);
     stmt = conn.createStatement();
     stmt.execute("Create Table " + regionTableName
-        + " (id varchar(10) primary key, name varchar(10), age int)");
+        + " (id varchar(10) primary key not null, name varchar(10), age int)");
   }
 
   public void closeDB() throws Exception {
@@ -105,6 +101,28 @@ public class JDBCAsyncWriterIntegrationTest {
     props.setProperty("driver", this.driver);
     props.setProperty("url", this.connectionURL);
     return props;
+  }
+
+  @Test
+  public void canExecuteSQLOnDataBase() throws Exception {
+    stmt.execute("Insert into " + regionTableName + " values ('1', 'emp1', 10)");
+    stmt.execute("Select * from " + regionTableName);
+    DatabaseMetaData metaData = conn.getMetaData();
+    ResultSet tablesRS = metaData.getTables(null, null, "%", null);
+    String realTableName = null;
+    while (tablesRS.next()) {
+      String name = tablesRS.getString("TABLE_NAME");
+      if (name.equalsIgnoreCase(this.regionTableName)) {
+        if (realTableName != null) {
+          throw new IllegalStateException("Duplicate tables that match region name");
+        }
+        realTableName = name;
+      }
+    }
+    if (realTableName == null) {
+      throw new IllegalStateException("no table was found that matches " + regionTableName);
+    }
+    ResultSet primaryKeys = metaData.getPrimaryKeys(null, null, realTableName);
   }
 
   @Test

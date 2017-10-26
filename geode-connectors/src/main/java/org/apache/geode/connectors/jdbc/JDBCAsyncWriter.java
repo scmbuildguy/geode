@@ -20,7 +20,9 @@ import java.util.Properties;
 import org.apache.geode.cache.asyncqueue.AsyncEvent;
 import org.apache.geode.cache.asyncqueue.AsyncEventListener;
 import org.apache.geode.cache.query.internal.DefaultQuery;
+import org.apache.geode.internal.logging.LogService;
 import org.apache.geode.pdx.PdxInstance;
+import org.apache.logging.log4j.Logger;
 
 /*
  * This class provides write behind cache semantics for a JDBC data source using AsyncEventListener.
@@ -28,6 +30,8 @@ import org.apache.geode.pdx.PdxInstance;
  * @since Geode 1.4
  */
 public class JDBCAsyncWriter implements AsyncEventListener {
+
+  static final Logger logger = LogService.getLogger();
 
   private long totalEvents = 0;
 
@@ -55,8 +59,8 @@ public class JDBCAsyncWriter implements AsyncEventListener {
           this.manager.write(event.getRegion(), event.getOperation(), event.getKey(), value);
           successfulEvents += 1;
         } catch (RuntimeException ex) {
-          // TODO: need to log exceptions here
-          throw ex;
+          // TODO improve the following logging
+          logger.error("Exception processing event " + event, ex);
         }
       }
     } finally {
