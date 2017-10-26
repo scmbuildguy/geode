@@ -126,7 +126,21 @@ public class JDBCAsyncWriterIntegrationTest {
   }
 
   @Test
-  public void canInstallJDBCAsyncWriterOnRegion() {
+  public void validateJDBCAsyncWriterTotalEvents() {
+    Region employees = createRegionWithJDBCAsyncWriter(regionTableName, getRequiredProperties());
+    PdxInstance pdx1 = cache.createPdxInstanceFactory("Employee").writeString("name", "Emp1")
+        .writeInt("age", 55).create();
+    PdxInstance pdx2 = cache.createPdxInstanceFactory("Employee").writeString("name", "Emp2")
+        .writeInt("age", 21).create();
+    employees.put("1", pdx1);
+    employees.put("2", pdx2);
+
+    Awaitility.await().atMost(5, TimeUnit.SECONDS)
+        .until(() -> assertThat(jdbcWriter.getTotalEvents()).isEqualTo(2));
+  }
+
+  @Test
+  public void canInsertIntoTable() throws Exception {
     Region employees = createRegionWithJDBCAsyncWriter(regionTableName, getRequiredProperties());
     PdxInstance pdx1 = cache.createPdxInstanceFactory("Employee").writeString("name", "Emp1")
         .writeInt("age", 55).create();
@@ -136,29 +150,40 @@ public class JDBCAsyncWriterIntegrationTest {
     employees.put("2", pdx2);
 
     Awaitility.await().atMost(30, TimeUnit.SECONDS)
-        .until(() -> assertThat(jdbcWriter.getTotalEvents()).isEqualTo(2));
+        .until(() -> assertThat(jdbcWriter.getSuccessfulEvents()).isEqualTo(2));
 
+    ResultSet rs = stmt.executeQuery("select * from " + regionTableName + " order by id asc");
+    assertThat(rs.next()).isTrue();
+    assertThat(rs.getString("id")).isEqualTo("1");
+    assertThat(rs.getString("name")).isEqualTo("Emp1");
+    assertThat(rs.getObject("age")).isEqualTo(55);
+    assertThat(rs.next()).isTrue();
+    assertThat(rs.getString("id")).isEqualTo("2");
+    assertThat(rs.getString("name")).isEqualTo("Emp2");
+    assertThat(rs.getObject("age")).isEqualTo(21);
+    assertThat(rs.next()).isFalse();
   }
 
   @Test
-  public void jdbcAsyncWriterCanInsertIntoDatabase() throws Exception {
+  public void verifyThatPdxFieldNamedSameAsPrimaryKeyIsIgnored() throws Exception {
     Region employees = createRegionWithJDBCAsyncWriter(regionTableName, getRequiredProperties());
     PdxInstance pdx1 = cache.createPdxInstanceFactory("Employee").writeString("name", "Emp1")
         .writeInt("age", 55).writeInt("id", 3).create();
-    PdxInstance pdx2 = cache.createPdxInstanceFactory("Employee").writeString("name", "Emp2")
-        .writeInt("age", 21).create();
     employees.put("1", pdx1);
-    employees.put("2", pdx2);
 
     Awaitility.await().atMost(30, TimeUnit.SECONDS)
-        .until(() -> assertThat(jdbcWriter.getSuccessfulEvents()).isEqualTo(2));
+        .until(() -> assertThat(jdbcWriter.getSuccessfulEvents()).isEqualTo(1));
 
-    validateTableRowCount(2);
-    printTable();
+    ResultSet rs = stmt.executeQuery("select * from " + regionTableName + " order by id asc");
+    assertThat(rs.next()).isTrue();
+    assertThat(rs.getString("id")).isEqualTo("1");
+    assertThat(rs.getString("name")).isEqualTo("Emp1");
+    assertThat(rs.getObject("age")).isEqualTo(55);
+    assertThat(rs.next()).isFalse();
   }
 
   @Test
-  public void jdbcAsyncWriterCanDestroyFromDatabase() throws Exception {
+  public void canDestroyFromTable() throws Exception {
     Region employees = createRegionWithJDBCAsyncWriter(regionTableName, getRequiredProperties());
     PdxInstance pdx1 = cache.createPdxInstanceFactory("Employee").writeString("name", "Emp1")
         .writeInt("age", 55).create();
@@ -175,32 +200,35 @@ public class JDBCAsyncWriterIntegrationTest {
     Awaitility.await().atMost(30, TimeUnit.SECONDS)
         .until(() -> assertThat(jdbcWriter.getSuccessfulEvents()).isEqualTo(3));
 
-    validateTableRowCount(1);
-    printTable();
+    ResultSet rs = stmt.executeQuery("select * from " + regionTableName + " order by id asc");
+    assertThat(rs.next()).isTrue();
+    assertThat(rs.getString("id")).isEqualTo("2");
+    assertThat(rs.getString("name")).isEqualTo("Emp2");
+    assertThat(rs.getObject("age")).isEqualTo(21);
+    assertThat(rs.next()).isFalse();
   }
 
   @Test
-  public void jdbcAsyncWriterCanUpdateDatabase() throws Exception {
+  public void canUpdateTable() throws Exception {
     Region employees = createRegionWithJDBCAsyncWriter(regionTableName, getRequiredProperties());
     PdxInstance pdx1 = cache.createPdxInstanceFactory("Employee").writeString("name", "Emp1")
         .writeInt("age", 55).create();
-    PdxInstance pdx2 = cache.createPdxInstanceFactory("Employee").writeString("name", "Emp2")
-        .writeInt("age", 21).create();
     employees.put("1", pdx1);
-    employees.put("2", pdx2);
 
     Awaitility.await().atMost(30, TimeUnit.SECONDS)
-        .until(() -> assertThat(jdbcWriter.getSuccessfulEvents()).isEqualTo(2));
+        .until(() -> assertThat(jdbcWriter.getSuccessfulEvents()).isEqualTo(1));
 
     PdxInstance pdx3 = cache.createPdxInstanceFactory("Employee").writeString("name", "Emp1")
         .writeInt("age", 72).create();
     employees.put("1", pdx3);
 
     Awaitility.await().atMost(30, TimeUnit.SECONDS)
-        .until(() -> assertThat(jdbcWriter.getSuccessfulEvents()).isEqualTo(3));
+        .until(() -> assertThat(jdbcWriter.getSuccessfulEvents()).isEqualTo(2));
 
-    validateTableRowCount(2);
-    printTable();
+    ResultSet rs = stmt.executeQuery("select * from " + regionTableName + " order by id asc");
+    assertThat(rs.next()).isTrue();
+    assertThat(rs.getObject("age")).isEqualTo(72);
+    assertThat(rs.next()).isFalse();
   }
 
   private Region createRegionWithJDBCAsyncWriter(String regionName, Properties props) {
