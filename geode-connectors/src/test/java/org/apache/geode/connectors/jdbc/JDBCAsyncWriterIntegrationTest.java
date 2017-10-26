@@ -231,6 +231,55 @@ public class JDBCAsyncWriterIntegrationTest {
     assertThat(rs.next()).isFalse();
   }
 
+  @Test
+  public void canUpdateBecomeInsert() throws Exception {
+    Region employees = createRegionWithJDBCAsyncWriter(regionTableName, getRequiredProperties());
+    PdxInstance pdx1 = cache.createPdxInstanceFactory("Employee").writeString("name", "Emp1")
+        .writeInt("age", 55).create();
+    employees.put("1", pdx1);
+
+    Awaitility.await().atMost(30, TimeUnit.SECONDS)
+        .until(() -> assertThat(jdbcWriter.getSuccessfulEvents()).isEqualTo(1));
+
+    stmt.execute("delete from " + regionTableName + " where id = '1'");
+    validateTableRowCount(0);
+
+    PdxInstance pdx3 = cache.createPdxInstanceFactory("Employee").writeString("name", "Emp1")
+        .writeInt("age", 72).create();
+    employees.put("1", pdx3);
+
+    Awaitility.await().atMost(10, TimeUnit.SECONDS)
+        .until(() -> assertThat(jdbcWriter.getSuccessfulEvents()).isEqualTo(2));
+
+    ResultSet rs = stmt.executeQuery("select * from " + regionTableName + " order by id asc");
+    assertThat(rs.next()).isTrue();
+    assertThat(rs.getString("id")).isEqualTo("1");
+    assertThat(rs.getString("name")).isEqualTo("Emp1");
+    assertThat(rs.getObject("age")).isEqualTo(72);
+    assertThat(rs.next()).isFalse();
+  }
+
+  @Test
+  public void canInsertBecomeUpdate() throws Exception {
+    stmt.execute("Insert into " + regionTableName + " values('1', 'bogus', 11)");
+    validateTableRowCount(1);
+
+    Region employees = createRegionWithJDBCAsyncWriter(regionTableName, getRequiredProperties());
+    PdxInstance pdx1 = cache.createPdxInstanceFactory("Employee").writeString("name", "Emp1")
+        .writeInt("age", 55).create();
+    employees.put("1", pdx1);
+
+    Awaitility.await().atMost(30, TimeUnit.SECONDS)
+        .until(() -> assertThat(jdbcWriter.getSuccessfulEvents()).isEqualTo(1));
+
+    ResultSet rs = stmt.executeQuery("select * from " + regionTableName + " order by id asc");
+    assertThat(rs.next()).isTrue();
+    assertThat(rs.getString("id")).isEqualTo("1");
+    assertThat(rs.getString("name")).isEqualTo("Emp1");
+    assertThat(rs.getObject("age")).isEqualTo(55);
+    assertThat(rs.next()).isFalse();
+  }
+
   private Region createRegionWithJDBCAsyncWriter(String regionName, Properties props) {
     jdbcWriter = new JDBCAsyncWriter();
     jdbcWriter.init(props);

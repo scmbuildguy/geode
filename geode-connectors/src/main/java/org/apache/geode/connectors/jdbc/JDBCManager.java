@@ -69,6 +69,26 @@ public class JDBCManager {
   public void write(Region region, Operation operation, Object key, PdxInstance value) {
     String tableName = getTableName(region);
     List<ColumnValue> columnList = getColumnToValueList(tableName, key, value, operation);
+    int updateCount = executeWrite(columnList, tableName, operation, false);
+    if (operation.isDestroy()) {
+      return;
+    }
+    if (updateCount <= 0) {
+      Operation upsertOp;
+      if (operation.isUpdate()) {
+        upsertOp = Operation.CREATE;
+      } else {
+        upsertOp = Operation.UPDATE;
+      }
+      updateCount = executeWrite(columnList, tableName, upsertOp, true);
+    }
+    if (updateCount != 1) {
+      throw new IllegalStateException("Unexpected updateCount " + updateCount);
+    }
+  }
+
+  private int executeWrite(List<ColumnValue> columnList, String tableName, Operation operation,
+      boolean handleException) {
     PreparedStatement pstmt = getQueryStatement(columnList, tableName, operation);
     try {
       int idx = 0;
@@ -77,8 +97,12 @@ public class JDBCManager {
         pstmt.setObject(idx, cv.getValue());
       }
       pstmt.execute();
+      return pstmt.getUpdateCount();
     } catch (SQLException e) {
-      handleSQLException(e);
+      if (handleException || operation.isDestroy()) {
+        handleSQLException(e);
+      }
+      return 0;
     } finally {
       clearStatement(pstmt);
     }
