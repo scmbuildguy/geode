@@ -15,8 +15,10 @@
 package org.apache.geode.connectors.jdbc;
 
 import java.sql.Connection;
+import java.sql.DatabaseMetaData;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
@@ -79,8 +81,7 @@ public class JDBCManager {
       }
       pstmt.execute();
     } catch (SQLException e) {
-      // TODO Auto-generated catch block
-      e.printStackTrace();
+      handleSQLException(e);
     } finally {
       clearStatement(pstmt);
     }
@@ -192,16 +193,16 @@ public class JDBCManager {
     // try {
     // return con.prepareStatement(k);
     // } catch (SQLException e) {
-    // throw new IllegalStateException("TODO handle exception", e);
+    // handleSQLException(e);
     // }
     // });
     String query = getQueryString(tableName, columnList, operation);
-    System.out.println("query=" + query);
     Connection con = getConnection();
     try {
       return con.prepareStatement(query);
     } catch (SQLException e) {
-      throw new IllegalStateException("TODO handle exception", e);
+      handleSQLException(e);
+      return null; // this line is never reached
     }
   }
 
@@ -242,8 +243,33 @@ public class JDBCManager {
     return fieldName;
   }
 
+  private final ConcurrentMap<String, String> tableToPrimaryKeyMap = new ConcurrentHashMap<>();
+
   private String getKeyColumnName(String tableName) {
-    return "id"; // TODO: do not hard code this!
+    return tableToPrimaryKeyMap.computeIfAbsent(tableName, k -> {
+      // TODO: check config for key column
+      Connection con = getConnection();
+      try {
+        DatabaseMetaData metaData = con.getMetaData();
+        ResultSet primaryKeys = metaData.getPrimaryKeys(null, null, k);
+        if (!primaryKeys.next()) {
+          throw new IllegalStateException(
+              "The table " + k + " does not have a primary key column.");
+        }
+        if (!primaryKeys.isLast()) {
+          throw new IllegalStateException(
+              "The table " + k + " has more than one primary key column.");
+        }
+        return primaryKeys.getString("COLUMN_NAME");
+      } catch (SQLException e) {
+        handleSQLException(e);
+        return null; // never reached
+      }
+    });
+  }
+
+  private void handleSQLException(SQLException e) {
+    throw new IllegalStateException("NYI: handleSQLException", e);
   }
 
   private String getTableName(Region region) {
