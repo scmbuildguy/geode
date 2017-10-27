@@ -37,33 +37,10 @@ public class JDBCManager {
 
   private Connection conn;
 
+  private final ConcurrentMap<String, String> tableToPrimaryKeyMap = new ConcurrentHashMap<>();
+
   JDBCManager(JDBCConfiguration config) {
     this.config = config;
-  }
-
-  public class ColumnValue {
-
-    final private boolean isKey;
-    final private String columnName;
-    final private Object value;
-
-    public ColumnValue(boolean isKey, String columnName, Object value) {
-      this.isKey = isKey;
-      this.columnName = columnName;
-      this.value = value;
-    }
-
-    public boolean isKey() {
-      return this.isKey;
-    }
-
-    public String getColumnName() {
-      return this.columnName;
-    }
-
-    public Object getValue() {
-      return this.value;
-    }
   }
 
   public void write(Region region, Operation operation, Object key, PdxInstance value) {
@@ -265,44 +242,45 @@ public class JDBCManager {
     return fieldName;
   }
 
-  private final ConcurrentMap<String, String> tableToPrimaryKeyMap = new ConcurrentHashMap<>();
-
   private String getKeyColumnName(String tableName) {
     return tableToPrimaryKeyMap.computeIfAbsent(tableName, k -> {
-      // TODO: check config for key column
-      Connection con = getConnection();
-      try {
-        DatabaseMetaData metaData = con.getMetaData();
-        ResultSet tablesRS = metaData.getTables(null, null, "%", null);
-        String realTableName = null;
-        while (tablesRS.next()) {
-          String name = tablesRS.getString("TABLE_NAME");
-          if (name.equalsIgnoreCase(k)) {
-            if (realTableName != null) {
-              throw new IllegalStateException("Duplicate tables that match region name");
-            }
-            realTableName = name;
-          }
-        }
-        if (realTableName == null) {
-          throw new IllegalStateException("no table was found that matches " + k);
-        }
-        ResultSet primaryKeys = metaData.getPrimaryKeys(null, null, realTableName);
-        if (!primaryKeys.next()) {
-          throw new IllegalStateException(
-              "The table " + k + " does not have a primary key column.");
-        }
-        String key = primaryKeys.getString("COLUMN_NAME");
-        if (primaryKeys.next()) {
-          throw new IllegalStateException(
-              "The table " + k + " has more than one primary key column.");
-        }
-        return key;
-      } catch (SQLException e) {
-        handleSQLException(e);
-        return null; // never reached
-      }
+      return computeKeyColumnName(k);
     });
+  }
+
+  private String computeKeyColumnName(String k) {
+    // TODO: check config for key column
+    Connection con = getConnection();
+    try {
+      DatabaseMetaData metaData = con.getMetaData();
+      ResultSet tablesRS = metaData.getTables(null, null, "%", null);
+      String realTableName = null;
+      while (tablesRS.next()) {
+        String name = tablesRS.getString("TABLE_NAME");
+        if (name.equalsIgnoreCase(k)) {
+          if (realTableName != null) {
+            throw new IllegalStateException("Duplicate tables that match region name");
+          }
+          realTableName = name;
+        }
+      }
+      if (realTableName == null) {
+        throw new IllegalStateException("no table was found that matches " + k);
+      }
+      ResultSet primaryKeys = metaData.getPrimaryKeys(null, null, realTableName);
+      if (!primaryKeys.next()) {
+        throw new IllegalStateException("The table " + k + " does not have a primary key column.");
+      }
+      String key = primaryKeys.getString("COLUMN_NAME");
+      if (primaryKeys.next()) {
+        throw new IllegalStateException(
+            "The table " + k + " has more than one primary key column.");
+      }
+      return key;
+    } catch (SQLException e) {
+      handleSQLException(e);
+      return null; // never reached
+    }
   }
 
   private void handleSQLException(SQLException e) {
