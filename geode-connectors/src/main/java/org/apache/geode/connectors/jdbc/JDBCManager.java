@@ -30,6 +30,7 @@ import java.util.concurrent.ConcurrentMap;
 import org.apache.geode.cache.Operation;
 import org.apache.geode.cache.Region;
 import org.apache.geode.pdx.PdxInstance;
+import org.apache.geode.pdx.internal.PdxInstanceImpl;
 
 public class JDBCManager {
 
@@ -45,8 +46,12 @@ public class JDBCManager {
 
   public void write(Region region, Operation operation, Object key, PdxInstance value) {
     String tableName = getTableName(region);
+    int pdxTypeId = 0;
+    if (value != null) {
+      pdxTypeId = ((PdxInstanceImpl) value).getPdxType().getTypeId();
+    }
     List<ColumnValue> columnList = getColumnToValueList(tableName, key, value, operation);
-    int updateCount = executeWrite(columnList, tableName, operation, false);
+    int updateCount = executeWrite(columnList, tableName, operation, pdxTypeId, false);
     if (operation.isDestroy()) {
       return;
     }
@@ -57,7 +62,7 @@ public class JDBCManager {
       } else {
         upsertOp = Operation.UPDATE;
       }
-      updateCount = executeWrite(columnList, tableName, upsertOp, true);
+      updateCount = executeWrite(columnList, tableName, upsertOp, pdxTypeId, true);
     }
     if (updateCount != 1) {
       throw new IllegalStateException("Unexpected updateCount " + updateCount);
@@ -65,23 +70,25 @@ public class JDBCManager {
   }
 
   private int executeWrite(List<ColumnValue> columnList, String tableName, Operation operation,
-      boolean handleException) {
-    PreparedStatement pstmt = getQueryStatement(columnList, tableName, operation);
-    try {
-      int idx = 0;
-      for (ColumnValue cv : columnList) {
-        idx++;
-        pstmt.setObject(idx, cv.getValue());
+      int pdxTypeId, boolean handleException) {
+    PreparedStatement pstmt = getPreparedStatement(columnList, tableName, operation, pdxTypeId);
+    synchronized (pstmt) {
+      try {
+        int idx = 0;
+        for (ColumnValue cv : columnList) {
+          idx++;
+          pstmt.setObject(idx, cv.getValue());
+        }
+        pstmt.execute();
+        return pstmt.getUpdateCount();
+      } catch (SQLException e) {
+        if (handleException || operation.isDestroy()) {
+          handleSQLException(e);
+        }
+        return 0;
+      } finally {
+        clearStatement(pstmt);
       }
-      pstmt.execute();
-      return pstmt.getUpdateCount();
-    } catch (SQLException e) {
-      if (handleException || operation.isDestroy()) {
-        handleSQLException(e);
-      }
-      return 0;
-    } finally {
-      clearStatement(pstmt);
     }
   }
 
@@ -179,30 +186,63 @@ public class JDBCManager {
     return result;
   }
 
-  // private final ConcurrentMap<String, PreparedStatement> preparedStatementCache = new
-  // ConcurrentHashMap<>();
+  private final ConcurrentMap<StatementKey, PreparedStatement> preparedStatementCache =
+      new ConcurrentHashMap<>();
 
-  private PreparedStatement getQueryStatement(List<ColumnValue> columnList, String tableName,
-      Operation operation) {
-    // ConcurrentMap<String, PreparedStatement> cache = getPreparedStatementCache(operation);
-    // return cache.computeIfAbsent(query, k -> {
-    // String query = getQueryString(tableName, columnList, operation);
-    // Connection con = getConnection();
-    // try {
-    // return con.prepareStatement(k);
-    // } catch (SQLException e) {
-    // handleSQLException(e);
-    // }
-    // });
-    String query = getQueryString(tableName, columnList, operation);
-    System.out.println("query=" + query);
-    Connection con = getConnection();
-    try {
-      return con.prepareStatement(query);
-    } catch (SQLException e) {
-      handleSQLException(e);
-      return null; // this line is never reached
+  private static class StatementKey {
+    private final int pdxTypeId;
+    private final Operation operation;
+    private final String tableName;
+
+    public StatementKey(int pdxTypeId, Operation operation, String tableName) {
+      this.pdxTypeId = pdxTypeId;
+      this.operation = operation;
+      this.tableName = tableName;
     }
+
+    @Override
+    public int hashCode() {
+      return operation.hashCode() + pdxTypeId + tableName.hashCode();
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+      if (this == obj) {
+        return true;
+      }
+      if (obj == null) {
+        return false;
+      }
+      StatementKey other = (StatementKey) obj;
+      if (!operation.equals(other.operation)) {
+        return false;
+      }
+      if (pdxTypeId != other.pdxTypeId) {
+        return false;
+      }
+      if (!tableName.equals(other.tableName)) {
+        return false;
+      }
+      return true;
+    }
+  }
+
+  private PreparedStatement getPreparedStatement(List<ColumnValue> columnList, String tableName,
+      Operation operation, int pdxTypeId) {
+    System.out.println("getPreparedStatement : " + pdxTypeId + "operation: " + operation
+        + " columns: " + columnList);
+    StatementKey key = new StatementKey(pdxTypeId, operation, tableName);
+    return preparedStatementCache.computeIfAbsent(key, k -> {
+      String query = getQueryString(tableName, columnList, operation);
+      System.out.println("query=" + query);
+      Connection con = getConnection();
+      try {
+        return con.prepareStatement(query);
+      } catch (SQLException e) {
+        handleSQLException(e);
+        return null; // this line is never reached
+      }
+    });
   }
 
   private List<ColumnValue> getColumnToValueList(String tableName, Object key, PdxInstance value,

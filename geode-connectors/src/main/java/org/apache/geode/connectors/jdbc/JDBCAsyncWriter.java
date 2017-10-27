@@ -56,6 +56,7 @@ public class JDBCAsyncWriter implements AsyncEventListener {
         // In that case need to serialize and deserialize.
         try {
           PdxInstance value = (PdxInstance) event.getDeserializedValue();
+          logger.info("AsyncEventListener event : " + event);
           this.manager.write(event.getRegion(), event.getOperation(), event.getKey(), value);
           successfulEvents += 1;
         } catch (RuntimeException ex) {

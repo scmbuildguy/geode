@@ -36,4 +36,9 @@ public class ColumnValue {
   public Object getValue() {
     return this.value;
   }
+
+  @Override
+  public String toString() {
+    return "ColumnValue [isKey=" + isKey + ", columnName=" + columnName + ", value=" + value + "]";
+  }
 }
