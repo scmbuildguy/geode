@@ -191,13 +191,17 @@ public class JDBCManager {
       }
     }
     try {
-      result = DriverManager.getConnection(this.config.getURL());
+      result = createConnection(this.config.getURL());
     } catch (SQLException e) {
       // TODO: consider a different exception
       throw new IllegalStateException("Could not connect to " + this.config.getURL(), e);
     }
     this.conn = result;
     return result;
+  }
+
+  protected Connection createConnection(String url) throws SQLException {
+    return DriverManager.getConnection(url);
   }
 
   private static class StatementKey {
