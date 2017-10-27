@@ -23,7 +23,9 @@ import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
@@ -39,6 +41,18 @@ public class JDBCManager {
   private Connection conn;
 
   private final ConcurrentMap<String, String> tableToPrimaryKeyMap = new ConcurrentHashMap<>();
+
+  private final ThreadLocal<Map<StatementKey, PreparedStatement>> preparedStatementCache =
+      new ThreadLocal<>();
+
+  private Map<StatementKey, PreparedStatement> getPreparedStatementCache() {
+    Map<StatementKey, PreparedStatement> result = preparedStatementCache.get();
+    if (result == null) {
+      result = new HashMap<>();
+      preparedStatementCache.set(result);
+    }
+    return result;
+  }
 
   JDBCManager(JDBCConfiguration config) {
     this.config = config;
@@ -186,9 +200,6 @@ public class JDBCManager {
     return result;
   }
 
-  private final ConcurrentMap<StatementKey, PreparedStatement> preparedStatementCache =
-      new ConcurrentHashMap<>();
-
   private static class StatementKey {
     private final int pdxTypeId;
     private final Operation operation;
@@ -232,7 +243,7 @@ public class JDBCManager {
     System.out.println("getPreparedStatement : " + pdxTypeId + "operation: " + operation
         + " columns: " + columnList);
     StatementKey key = new StatementKey(pdxTypeId, operation, tableName);
-    return preparedStatementCache.computeIfAbsent(key, k -> {
+    return getPreparedStatementCache().computeIfAbsent(key, k -> {
       String query = getQueryString(tableName, columnList, operation);
       System.out.println("query=" + query);
       Connection con = getConnection();
