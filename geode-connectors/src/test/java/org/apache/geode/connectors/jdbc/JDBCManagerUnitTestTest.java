@@ -23,6 +23,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Properties;
 
 import org.junit.After;
@@ -46,6 +47,7 @@ public class JDBCManagerUnitTestTest {
   private String regionName = "jdbcRegion";
   Connection connection;
   PreparedStatement preparedStatement;
+  PreparedStatement preparedStatement2;
 
   private static final String ID_COLUMN_NAME = "ID";
   private static final String NAME_COLUMN_NAME = "name";
@@ -80,7 +82,39 @@ public class JDBCManagerUnitTestTest {
 
       return connection;
     }
+  }
 
+  public class TestableUpsertJDBCManager extends JDBCManager {
+
+    TestableUpsertJDBCManager(JDBCConfiguration config) {
+      super(config);
+    }
+
+    @Override
+    protected Connection createConnection(String url) throws SQLException {
+      ResultSet rsKeys = mock(ResultSet.class);
+      when(rsKeys.next()).thenReturn(true, false);
+      when(rsKeys.getString("COLUMN_NAME")).thenReturn(ID_COLUMN_NAME);
+
+      ResultSet rs = mock(ResultSet.class);
+      when(rs.next()).thenReturn(true, false);
+      when(rs.getString("TABLE_NAME")).thenReturn(regionName.toUpperCase());
+
+      DatabaseMetaData metaData = mock(DatabaseMetaData.class);
+      when(metaData.getPrimaryKeys(null, null, regionName.toUpperCase())).thenReturn(rsKeys);
+      when(metaData.getTables(any(), any(), any(), any())).thenReturn(rs);
+
+      preparedStatement = mock(PreparedStatement.class);
+      preparedStatement2 = mock(PreparedStatement.class);
+      when(preparedStatement.getUpdateCount()).thenReturn(0);
+      when(preparedStatement2.getUpdateCount()).thenReturn(1);
+
+      connection = mock(Connection.class);
+      when(connection.getMetaData()).thenReturn(metaData);
+      when(connection.prepareStatement(any())).thenReturn(preparedStatement, preparedStatement2);
+
+      return connection;
+    }
   }
 
   @Before
@@ -90,15 +124,22 @@ public class JDBCManagerUnitTestTest {
   public void tearDown() throws Exception {}
 
   private void createManager(String driver, String url) {
-    Properties props = new Properties();
-    props.setProperty("url", url);
-    props.setProperty("driver", driver);
-    JDBCConfiguration config = new JDBCConfiguration(props);
-    this.mgr = new TestableJDBCManager(config);
+    this.mgr = new TestableJDBCManager(createConfiguration(driver, url));
   }
 
   private void createDefaultManager() {
     createManager("java.lang.String", "fakeURL");
+  }
+
+  private void createUpsertManager() {
+    this.mgr = new TestableUpsertJDBCManager(createConfiguration("java.lang.String", "fakeURL"));
+  }
+
+  private JDBCConfiguration createConfiguration(String driver, String url) {
+    Properties props = new Properties();
+    props.setProperty("url", url);
+    props.setProperty("driver", driver);
+    return new JDBCConfiguration(props);
   }
 
   @Test
@@ -186,4 +227,39 @@ public class JDBCManagerUnitTestTest {
     assertThat(caughtException().getMessage()).isEqualTo("unsupported operation INVALIDATE");
   }
 
+  @Test
+  public void verifyInsertUpdate() throws SQLException {
+    createUpsertManager();
+    GemFireCacheImpl cache = Fakes.cache();
+    Region region = Fakes.region(regionName, cache);
+    PdxInstanceImpl pdx1 = mockPdxInstance("Emp1", 21);
+    this.mgr.write(region, Operation.CREATE, "1", pdx1);
+    verify(this.preparedStatement).execute();
+    verify(this.preparedStatement2).execute();
+    ArgumentCaptor<String> sqlCaptor = ArgumentCaptor.forClass(String.class);
+    verify(this.connection, times(2)).prepareStatement(sqlCaptor.capture());
+    List<String> allArgs = sqlCaptor.getAllValues();
+    assertThat(allArgs.get(0)).isEqualTo("INSERT INTO " + regionName + "(" + NAME_COLUMN_NAME + ", "
+        + AGE_COLUMN_NAME + ", " + ID_COLUMN_NAME + ") VALUES (?,?,?)");
+    assertThat(allArgs.get(1)).isEqualTo("UPDATE " + regionName + " SET " + NAME_COLUMN_NAME
+        + " = ?, " + AGE_COLUMN_NAME + " = ? WHERE " + ID_COLUMN_NAME + " = ?");
+  }
+
+  @Test
+  public void verifyUpdateInsert() throws SQLException {
+    createUpsertManager();
+    GemFireCacheImpl cache = Fakes.cache();
+    Region region = Fakes.region(regionName, cache);
+    PdxInstanceImpl pdx1 = mockPdxInstance("Emp1", 21);
+    this.mgr.write(region, Operation.UPDATE, "1", pdx1);
+    verify(this.preparedStatement).execute();
+    verify(this.preparedStatement2).execute();
+    ArgumentCaptor<String> sqlCaptor = ArgumentCaptor.forClass(String.class);
+    verify(this.connection, times(2)).prepareStatement(sqlCaptor.capture());
+    List<String> allArgs = sqlCaptor.getAllValues();
+    assertThat(allArgs.get(0)).isEqualTo("UPDATE " + regionName + " SET " + NAME_COLUMN_NAME
+        + " = ?, " + AGE_COLUMN_NAME + " = ? WHERE " + ID_COLUMN_NAME + " = ?");
+    assertThat(allArgs.get(1)).isEqualTo("INSERT INTO " + regionName + "(" + NAME_COLUMN_NAME + ", "
+        + AGE_COLUMN_NAME + ", " + ID_COLUMN_NAME + ") VALUES (?,?,?)");
+  }
 }
