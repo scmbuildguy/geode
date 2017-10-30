@@ -47,7 +47,7 @@ public class JDBCAsyncWriter implements AsyncEventListener {
 
   @Override
   public boolean processEvents(List<AsyncEvent> events) {
-    totalEvents += events.size();
+    changeTotalEvents(events.size());
     // TODO: have a better API that lets you do this
     DefaultQuery.setPdxReadSerialized(true);
     try {
@@ -58,7 +58,8 @@ public class JDBCAsyncWriter implements AsyncEventListener {
           PdxInstance value = (PdxInstance) event.getDeserializedValue();
           logger.info("AsyncEventListener event : " + event);
           this.manager.write(event.getRegion(), event.getOperation(), event.getKey(), value);
-          successfulEvents += 1;
+          
+          changeSuccessfulEvents(1);
         } catch (RuntimeException ex) {
           // TODO improve the following logging
           logger.error("Exception processing event " + event, ex);
@@ -76,11 +77,16 @@ public class JDBCAsyncWriter implements AsyncEventListener {
     this.manager = new JDBCManager(config);
   };
 
-  public long getTotalEvents() {
+  private synchronized void changeTotalEvents(long delta) {
+    this.totalEvents += delta;
+  }
+  public synchronized long getTotalEvents() {
     return this.totalEvents;
   }
-
-  public long getSuccessfulEvents() {
+  private synchronized void changeSuccessfulEvents(long delta) {
+    this.successfulEvents += delta;
+  }
+  public synchronized long getSuccessfulEvents() {
     return this.successfulEvents;
   }
 }
