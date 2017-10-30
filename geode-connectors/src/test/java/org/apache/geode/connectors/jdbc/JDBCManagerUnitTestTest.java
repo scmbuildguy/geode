@@ -17,15 +17,11 @@ package org.apache.geode.connectors.jdbc;
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
 import static com.googlecode.catchexception.CatchException.*;
-import static com.googlecode.catchexception.CatchException.caughtException;
-
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
-import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Statement;
 import java.util.Arrays;
 import java.util.Properties;
 
@@ -38,8 +34,6 @@ import org.mockito.ArgumentCaptor;
 import org.apache.geode.cache.Operation;
 import org.apache.geode.cache.Region;
 import org.apache.geode.internal.cache.GemFireCacheImpl;
-import org.apache.geode.pdx.PdxInstance;
-import org.apache.geode.pdx.PdxInstanceFactory;
 import org.apache.geode.pdx.internal.PdxInstanceImpl;
 import org.apache.geode.pdx.internal.PdxType;
 import org.apache.geode.test.fake.Fakes;
