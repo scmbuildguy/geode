@@ -362,7 +362,10 @@ distributions {
 
         from project(":geode-lucene").configurations.runtime
         from project(":geode-lucene").configurations.archives.allArtifacts.files
-        
+       
+        from project(":geode-connectors").configurations.runtime
+        from project(":geode-connectors").configurations.archives.allArtifacts.files
+ 
         from project(":geode-old-client-support").configurations.runtime
         from project(":geode-old-client-support").configurations.archives.allArtifacts.files
 
