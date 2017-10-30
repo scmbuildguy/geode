@@ -31,6 +31,7 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
+import org.mockito.ArgumentCaptor;
 
 import org.apache.geode.cache.Operation;
 import org.apache.geode.cache.Region;
@@ -47,6 +48,12 @@ public class JDBCManagerUnitTestTest {
 
   private JDBCManager mgr;
   private String regionName = "jdbcRegion";
+  Connection connection;
+  PreparedStatement preparedStatement;
+  
+  private static final String ID_COLUMN_NAME = "ID";
+  private static final String NAME_COLUMN_NAME = "name";
+  private static final String AGE_COLUMN_NAME = "age";
 
   public class TestableJDBCManager extends JDBCManager {
 
@@ -58,7 +65,7 @@ public class JDBCManagerUnitTestTest {
     protected Connection createConnection(String url) throws SQLException {
       ResultSet rsKeys = mock(ResultSet.class);
       when(rsKeys.next()).thenReturn(true, false);
-      when(rsKeys.getString("COLUMN_NAME")).thenReturn("ID");
+      when(rsKeys.getString("COLUMN_NAME")).thenReturn(ID_COLUMN_NAME);
 
       ResultSet rs = mock(ResultSet.class);
       when(rs.next()).thenReturn(true, false);
@@ -68,14 +75,14 @@ public class JDBCManagerUnitTestTest {
       when(metaData.getPrimaryKeys(null, null, regionName.toUpperCase())).thenReturn(rsKeys);
       when(metaData.getTables(any(), any(), any(), any())).thenReturn(rs);
 
-      PreparedStatement pstmt = mock(PreparedStatement.class);
-      when(pstmt.getUpdateCount()).thenReturn(1);
+      preparedStatement = mock(PreparedStatement.class);
+      when(preparedStatement.getUpdateCount()).thenReturn(1);
 
-      Connection conn = mock(Connection.class);
-      when(conn.getMetaData()).thenReturn(metaData);
-      when(conn.prepareStatement(any())).thenReturn(pstmt, null);
+      connection = mock(Connection.class);
+      when(connection.getMetaData()).thenReturn(metaData);
+      when(connection.prepareStatement(any())).thenReturn(preparedStatement, null);
 
-      return conn;
+      return connection;
     }
 
   }
@@ -95,17 +102,60 @@ public class JDBCManagerUnitTestTest {
   public void tearDown() throws Exception {}
 
   @Test
-  public void testWritingCreate() {
+  public void verifySimpleCreateCallsExecute() throws SQLException {
     GemFireCacheImpl cache = Fakes.cache();
     Region region = Fakes.region(regionName, cache);
-    PdxInstanceImpl pdx1 = mock(PdxInstanceImpl.class);
-    when(pdx1.getFieldNames()).thenReturn(Arrays.asList("name", "age"));
-    when(pdx1.getField("name")).thenReturn("Emp1");
-    when(pdx1.getField("age")).thenReturn(21);
-    PdxType pdxType = mock(PdxType.class);
-    when(pdxType.getTypeId()).thenReturn(1);
-    when(pdx1.getPdxType()).thenReturn(pdxType);
+    PdxInstanceImpl pdx1 = mockPdxInstance("Emp1", 21);
     this.mgr.write(region, Operation.CREATE, "1", pdx1);
+    verify(this.preparedStatement).execute();
+    ArgumentCaptor<String> sqlCaptor = ArgumentCaptor.forClass(String.class);
+    verify(this.connection).prepareStatement(sqlCaptor.capture());
+    assertThat(sqlCaptor.getValue()).isEqualTo("INSERT INTO " + regionName + "(" + NAME_COLUMN_NAME + ", " + AGE_COLUMN_NAME + ", " + ID_COLUMN_NAME + ") VALUES (?,?,?)");
   }
 
+  @Test
+  public void verifySimpleUpdateCallsExecute() throws SQLException {
+    GemFireCacheImpl cache = Fakes.cache();
+    Region region = Fakes.region(regionName, cache);
+    PdxInstanceImpl pdx1 = mockPdxInstance("Emp1", 21);
+    this.mgr.write(region, Operation.UPDATE, "1", pdx1);
+    verify(this.preparedStatement).execute();
+    ArgumentCaptor<String> sqlCaptor = ArgumentCaptor.forClass(String.class);
+    verify(this.connection).prepareStatement(sqlCaptor.capture());
+    assertThat(sqlCaptor.getValue()).isEqualTo("UPDATE " + regionName + " SET " + NAME_COLUMN_NAME + " = ?, " + AGE_COLUMN_NAME + " = ? WHERE " + ID_COLUMN_NAME + " = ?");
+  }
+  
+  @Test
+  public void verifySimpleDestroyCallsExecute() throws SQLException {
+    GemFireCacheImpl cache = Fakes.cache();
+    Region region = Fakes.region(regionName, cache);
+    this.mgr.write(region, Operation.DESTROY, "1", null);
+    verify(this.preparedStatement).execute();
+    ArgumentCaptor<String> sqlCaptor = ArgumentCaptor.forClass(String.class);
+    verify(this.connection).prepareStatement(sqlCaptor.capture());
+    assertThat(sqlCaptor.getValue()).isEqualTo("DELETE FROM " + regionName + " WHERE " + ID_COLUMN_NAME + " = ?");
+  }
+  
+  @Test
+  public void verifyTwoCreatesReuseSameStatement() throws SQLException {
+    GemFireCacheImpl cache = Fakes.cache();
+    Region region = Fakes.region(regionName, cache);
+    PdxInstanceImpl pdx1 = mockPdxInstance("Emp1", 21);
+    PdxInstanceImpl pdx2 = mockPdxInstance("Emp2", 55);
+    this.mgr.write(region, Operation.CREATE, "1", pdx1);
+    this.mgr.write(region, Operation.CREATE, "2", pdx2);
+    verify(this.preparedStatement, times(2)).execute();
+    verify(this.connection).prepareStatement(any());
+  }
+
+  private PdxInstanceImpl mockPdxInstance(String name, int age) {
+    PdxInstanceImpl pdxInstance = mock(PdxInstanceImpl.class);
+    when(pdxInstance.getFieldNames()).thenReturn(Arrays.asList(NAME_COLUMN_NAME, AGE_COLUMN_NAME));
+    when(pdxInstance.getField(NAME_COLUMN_NAME)).thenReturn(name);
+    when(pdxInstance.getField(AGE_COLUMN_NAME)).thenReturn(age);
+    PdxType pdxType = mock(PdxType.class);
+    when(pdxType.getTypeId()).thenReturn(1);
+    when(pdxInstance.getPdxType()).thenReturn(pdxType);
+    return pdxInstance;
+  }
 }
