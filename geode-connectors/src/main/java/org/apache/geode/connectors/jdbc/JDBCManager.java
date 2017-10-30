@@ -303,7 +303,7 @@ public class JDBCManager {
     });
   }
 
-  private String computeKeyColumnName(String k) {
+  private String computeKeyColumnName(String tableName) {
     // TODO: check config for key column
     Connection con = getConnection();
     try {
@@ -312,7 +312,7 @@ public class JDBCManager {
       String realTableName = null;
       while (tablesRS.next()) {
         String name = tablesRS.getString("TABLE_NAME");
-        if (name.equalsIgnoreCase(k)) {
+        if (name.equalsIgnoreCase(tableName)) {
           if (realTableName != null) {
             throw new IllegalStateException("Duplicate tables that match region name");
           }
@@ -320,16 +320,17 @@ public class JDBCManager {
         }
       }
       if (realTableName == null) {
-        throw new IllegalStateException("no table was found that matches " + k);
+        throw new IllegalStateException("no table was found that matches " + tableName);
       }
       ResultSet primaryKeys = metaData.getPrimaryKeys(null, null, realTableName);
       if (!primaryKeys.next()) {
-        throw new IllegalStateException("The table " + k + " does not have a primary key column.");
+        throw new IllegalStateException(
+            "The table " + tableName + " does not have a primary key column.");
       }
       String key = primaryKeys.getString("COLUMN_NAME");
       if (primaryKeys.next()) {
         throw new IllegalStateException(
-            "The table " + k + " has more than one primary key column.");
+            "The table " + tableName + " has more than one primary key column.");
       }
       return key;
     } catch (SQLException e) {
