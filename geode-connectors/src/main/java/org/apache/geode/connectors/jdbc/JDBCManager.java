@@ -67,7 +67,8 @@ public class JDBCManager {
     List<ColumnValue> columnList = getColumnToValueList(tableName, key, value, operation);
     int updateCount = executeWrite(columnList, tableName, operation, pdxTypeId, false);
     if (operation.isDestroy()) {
-      // TODO: should we check updateCount here?
+      // TODO: should we check updateCount here? Probably not. It is possible we have nothing in the
+      // table to destroy.
       return;
     }
     if (updateCount <= 0) {
@@ -305,7 +306,7 @@ public class JDBCManager {
     });
   }
 
-  private String computeKeyColumnName(String tableName) {
+  String computeKeyColumnName(String tableName) {
     // TODO: check config for key column
     Connection con = getConnection();
     try {
