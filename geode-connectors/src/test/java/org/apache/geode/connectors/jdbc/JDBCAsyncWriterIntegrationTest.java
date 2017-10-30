@@ -31,6 +31,7 @@ import org.apache.geode.cache.RegionShortcut;
 import org.apache.geode.connectors.jdbc.JDBCAsyncWriter;
 import org.apache.geode.internal.cache.GemFireCacheImpl;
 import org.apache.geode.pdx.PdxInstance;
+import org.apache.geode.pdx.PdxSerializationException;
 import org.apache.geode.test.junit.categories.IntegrationTest;
 import org.awaitility.Awaitility;
 
@@ -61,7 +62,7 @@ public class JDBCAsyncWriterIntegrationTest {
       // ignore
     }
     if (null == cache) {
-      cache = (GemFireCacheImpl) new CacheFactory().setPdxReadSerialized(true).set(MCAST_PORT, "0")
+      cache = (GemFireCacheImpl) new CacheFactory().setPdxReadSerialized(false).set(MCAST_PORT, "0")
           .create();
     }
     setupDB();
@@ -195,7 +196,13 @@ public class JDBCAsyncWriterIntegrationTest {
     Awaitility.await().atMost(30, TimeUnit.SECONDS)
         .until(() -> assertThat(jdbcWriter.getSuccessfulEvents()).isEqualTo(2));
 
-    employees.destroy("1");
+    try {
+      employees.destroy("1");
+    } catch (PdxSerializationException ignore) {
+      // destroy tries to deserialize old value
+      // which does not work because our PdxInstance
+      // does not have a real class
+    }
 
     Awaitility.await().atMost(30, TimeUnit.SECONDS)
         .until(() -> assertThat(jdbcWriter.getSuccessfulEvents()).isEqualTo(3));
@@ -220,7 +227,13 @@ public class JDBCAsyncWriterIntegrationTest {
 
     PdxInstance pdx3 = cache.createPdxInstanceFactory("Employee").writeString("name", "Emp1")
         .writeInt("age", 72).create();
-    employees.put("1", pdx3);
+    try {
+      employees.put("1", pdx3);
+    } catch (PdxSerializationException ignore) {
+      // put tries to deserialize old value
+      // which does not work because our PdxInstance
+      // does not have a real class
+    }
 
     Awaitility.await().atMost(30, TimeUnit.SECONDS)
         .until(() -> assertThat(jdbcWriter.getSuccessfulEvents()).isEqualTo(2));
@@ -246,7 +259,13 @@ public class JDBCAsyncWriterIntegrationTest {
 
     PdxInstance pdx3 = cache.createPdxInstanceFactory("Employee").writeString("name", "Emp1")
         .writeInt("age", 72).create();
-    employees.put("1", pdx3);
+    try {
+      employees.put("1", pdx3);
+    } catch (PdxSerializationException ignore) {
+      // put tries to deserialize old value
+      // which does not work because our PdxInstance
+      // does not have a real class
+    }
 
     Awaitility.await().atMost(10, TimeUnit.SECONDS)
         .until(() -> assertThat(jdbcWriter.getSuccessfulEvents()).isEqualTo(2));
