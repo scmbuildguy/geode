@@ -67,6 +67,7 @@ public class JDBCManager {
     List<ColumnValue> columnList = getColumnToValueList(tableName, key, value, operation);
     int updateCount = executeWrite(columnList, tableName, operation, pdxTypeId, false);
     if (operation.isDestroy()) {
+      // TODO: should we check updateCount here?
       return;
     }
     if (updateCount <= 0) {
@@ -129,6 +130,7 @@ public class JDBCManager {
   private String getDestroyQueryString(String tableName, List<ColumnValue> columnList) {
     assert columnList.size() == 1;
     ColumnValue keyCV = columnList.get(0);
+    assert keyCV.isKey();
     StringBuilder query =
         new StringBuilder("DELETE FROM " + tableName + " WHERE " + keyCV.getColumnName() + " = ?");
     return query.toString();
@@ -288,7 +290,7 @@ public class JDBCManager {
   }
 
   private boolean isFieldExcluded(String fieldName) {
-    // TODO Auto-generated method stub
+    // TODO check configuration
     return false;
   }
 
