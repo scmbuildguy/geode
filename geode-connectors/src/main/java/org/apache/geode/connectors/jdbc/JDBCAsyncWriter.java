@@ -58,7 +58,7 @@ public class JDBCAsyncWriter implements AsyncEventListener {
           PdxInstance value = (PdxInstance) event.getDeserializedValue();
           logger.info("AsyncEventListener event : " + event);
           this.manager.write(event.getRegion(), event.getOperation(), event.getKey(), value);
-          
+
           changeSuccessfulEvents(1);
         } catch (RuntimeException ex) {
           // TODO improve the following logging
@@ -80,12 +80,15 @@ public class JDBCAsyncWriter implements AsyncEventListener {
   private synchronized void changeTotalEvents(long delta) {
     this.totalEvents += delta;
   }
+
   public synchronized long getTotalEvents() {
     return this.totalEvents;
   }
+
   private synchronized void changeSuccessfulEvents(long delta) {
     this.successfulEvents += delta;
   }
+
   public synchronized long getSuccessfulEvents() {
     return this.successfulEvents;
   }
