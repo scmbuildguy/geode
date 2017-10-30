@@ -52,7 +52,7 @@ public class JDBCManagerUnitTestTest {
   private String regionName = "jdbcRegion";
   Connection connection;
   PreparedStatement preparedStatement;
-  
+
   private static final String ID_COLUMN_NAME = "ID";
   private static final String NAME_COLUMN_NAME = "name";
   private static final String AGE_COLUMN_NAME = "age";
@@ -90,12 +90,10 @@ public class JDBCManagerUnitTestTest {
   }
 
   @Before
-  public void setUp() throws Exception {
-  }
+  public void setUp() throws Exception {}
 
   @After
-  public void tearDown() throws Exception {
-  }
+  public void tearDown() throws Exception {}
 
   private void createManager(String driver, String url) {
     Properties props = new Properties();
@@ -104,11 +102,11 @@ public class JDBCManagerUnitTestTest {
     JDBCConfiguration config = new JDBCConfiguration(props);
     this.mgr = new TestableJDBCManager(config);
   }
-  
+
   private void createDefaultManager() {
     createManager("java.lang.String", "fakeURL");
   }
-  
+
   @Test
   public void verifySimpleCreateCallsExecute() throws SQLException {
     createDefaultManager();
@@ -119,7 +117,8 @@ public class JDBCManagerUnitTestTest {
     verify(this.preparedStatement).execute();
     ArgumentCaptor<String> sqlCaptor = ArgumentCaptor.forClass(String.class);
     verify(this.connection).prepareStatement(sqlCaptor.capture());
-    assertThat(sqlCaptor.getValue()).isEqualTo("INSERT INTO " + regionName + "(" + NAME_COLUMN_NAME + ", " + AGE_COLUMN_NAME + ", " + ID_COLUMN_NAME + ") VALUES (?,?,?)");
+    assertThat(sqlCaptor.getValue()).isEqualTo("INSERT INTO " + regionName + "(" + NAME_COLUMN_NAME
+        + ", " + AGE_COLUMN_NAME + ", " + ID_COLUMN_NAME + ") VALUES (?,?,?)");
   }
 
   @Test
@@ -132,9 +131,10 @@ public class JDBCManagerUnitTestTest {
     verify(this.preparedStatement).execute();
     ArgumentCaptor<String> sqlCaptor = ArgumentCaptor.forClass(String.class);
     verify(this.connection).prepareStatement(sqlCaptor.capture());
-    assertThat(sqlCaptor.getValue()).isEqualTo("UPDATE " + regionName + " SET " + NAME_COLUMN_NAME + " = ?, " + AGE_COLUMN_NAME + " = ? WHERE " + ID_COLUMN_NAME + " = ?");
+    assertThat(sqlCaptor.getValue()).isEqualTo("UPDATE " + regionName + " SET " + NAME_COLUMN_NAME
+        + " = ?, " + AGE_COLUMN_NAME + " = ? WHERE " + ID_COLUMN_NAME + " = ?");
   }
-  
+
   @Test
   public void verifySimpleDestroyCallsExecute() throws SQLException {
     createDefaultManager();
@@ -144,9 +144,10 @@ public class JDBCManagerUnitTestTest {
     verify(this.preparedStatement).execute();
     ArgumentCaptor<String> sqlCaptor = ArgumentCaptor.forClass(String.class);
     verify(this.connection).prepareStatement(sqlCaptor.capture());
-    assertThat(sqlCaptor.getValue()).isEqualTo("DELETE FROM " + regionName + " WHERE " + ID_COLUMN_NAME + " = ?");
+    assertThat(sqlCaptor.getValue())
+        .isEqualTo("DELETE FROM " + regionName + " WHERE " + ID_COLUMN_NAME + " = ?");
   }
-  
+
   @Test
   public void verifyTwoCreatesReuseSameStatement() throws SQLException {
     createDefaultManager();
@@ -170,12 +171,25 @@ public class JDBCManagerUnitTestTest {
     when(pdxInstance.getPdxType()).thenReturn(pdxType);
     return pdxInstance;
   }
-  
+
   @Test
   public void verifyMissingDriverClass() {
     createManager("non existent driver", "fakeURL");
     catchException(this.mgr).getConnection();
-    assertThat((Exception)caughtException()).isInstanceOf(IllegalStateException.class);
-    assertThat(caughtException().getMessage()).isEqualTo("Driver class \"non existent driver\" not found");
+    assertThat((Exception) caughtException()).isInstanceOf(IllegalStateException.class);
+    assertThat(caughtException().getMessage())
+        .isEqualTo("Driver class \"non existent driver\" not found");
   }
+
+  @Test
+  public void verifySimpleInvalidateIsUnsupported() throws SQLException {
+    createDefaultManager();
+    GemFireCacheImpl cache = Fakes.cache();
+    Region region = Fakes.region(regionName, cache);
+    PdxInstanceImpl pdx1 = mockPdxInstance("Emp1", 21);
+    catchException(this.mgr).write(region, Operation.INVALIDATE, "1", pdx1);
+    assertThat((Exception) caughtException()).isInstanceOf(IllegalStateException.class);
+    assertThat(caughtException().getMessage()).isEqualTo("unsupported operation INVALIDATE");
+  }
+
 }

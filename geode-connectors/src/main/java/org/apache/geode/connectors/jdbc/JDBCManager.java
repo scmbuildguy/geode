@@ -188,8 +188,8 @@ public class JDBCManager {
         Class.forName(this.config.getDriver());
       } catch (ClassNotFoundException e) {
         // TODO: consider a different exception
-        throw new IllegalStateException("Driver class \"" + this.config.getDriver() + "\" not found",
-            e);
+        throw new IllegalStateException(
+            "Driver class \"" + this.config.getDriver() + "\" not found", e);
       }
     }
     try {
