@@ -173,7 +173,7 @@ public class JDBCManager {
     return columnNames.append(columnValues).toString();
   }
 
-  private Connection getConnection() {
+  Connection getConnection() {
     Connection result = this.conn;
     try {
       if (result != null && !result.isClosed()) {
@@ -188,7 +188,7 @@ public class JDBCManager {
         Class.forName(this.config.getDriver());
       } catch (ClassNotFoundException e) {
         // TODO: consider a different exception
-        throw new IllegalStateException("Driver class " + this.config.getDriver() + " not found",
+        throw new IllegalStateException("Driver class \"" + this.config.getDriver() + "\" not found",
             e);
       }
     }

@@ -16,6 +16,8 @@ package org.apache.geode.connectors.jdbc;
 
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
+import static com.googlecode.catchexception.CatchException.*;
+import static com.googlecode.catchexception.CatchException.caughtException;
 
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
@@ -89,20 +91,27 @@ public class JDBCManagerUnitTestTest {
 
   @Before
   public void setUp() throws Exception {
+  }
+
+  @After
+  public void tearDown() throws Exception {
+  }
+
+  private void createManager(String driver, String url) {
     Properties props = new Properties();
-    String driver = "org.apache.derby.jdbc.EmbeddedDriver";
-    String connectionURL = "jdbc:derby:memory:DerbyTestDB;create=true";
-    props.setProperty("url", connectionURL);
+    props.setProperty("url", url);
     props.setProperty("driver", driver);
     JDBCConfiguration config = new JDBCConfiguration(props);
     this.mgr = new TestableJDBCManager(config);
   }
-
-  @After
-  public void tearDown() throws Exception {}
-
+  
+  private void createDefaultManager() {
+    createManager("java.lang.String", "fakeURL");
+  }
+  
   @Test
   public void verifySimpleCreateCallsExecute() throws SQLException {
+    createDefaultManager();
     GemFireCacheImpl cache = Fakes.cache();
     Region region = Fakes.region(regionName, cache);
     PdxInstanceImpl pdx1 = mockPdxInstance("Emp1", 21);
@@ -115,6 +124,7 @@ public class JDBCManagerUnitTestTest {
 
   @Test
   public void verifySimpleUpdateCallsExecute() throws SQLException {
+    createDefaultManager();
     GemFireCacheImpl cache = Fakes.cache();
     Region region = Fakes.region(regionName, cache);
     PdxInstanceImpl pdx1 = mockPdxInstance("Emp1", 21);
@@ -127,6 +137,7 @@ public class JDBCManagerUnitTestTest {
   
   @Test
   public void verifySimpleDestroyCallsExecute() throws SQLException {
+    createDefaultManager();
     GemFireCacheImpl cache = Fakes.cache();
     Region region = Fakes.region(regionName, cache);
     this.mgr.write(region, Operation.DESTROY, "1", null);
@@ -138,6 +149,7 @@ public class JDBCManagerUnitTestTest {
   
   @Test
   public void verifyTwoCreatesReuseSameStatement() throws SQLException {
+    createDefaultManager();
     GemFireCacheImpl cache = Fakes.cache();
     Region region = Fakes.region(regionName, cache);
     PdxInstanceImpl pdx1 = mockPdxInstance("Emp1", 21);
@@ -157,5 +169,13 @@ public class JDBCManagerUnitTestTest {
     when(pdxType.getTypeId()).thenReturn(1);
     when(pdxInstance.getPdxType()).thenReturn(pdxType);
     return pdxInstance;
+  }
+  
+  @Test
+  public void verifyMissingDriverClass() {
+    createManager("non existent driver", "fakeURL");
+    catchException(this.mgr).getConnection();
+    assertThat((Exception)caughtException()).isInstanceOf(IllegalStateException.class);
+    assertThat(caughtException().getMessage()).isEqualTo("Driver class \"non existent driver\" not found");
   }
 }
