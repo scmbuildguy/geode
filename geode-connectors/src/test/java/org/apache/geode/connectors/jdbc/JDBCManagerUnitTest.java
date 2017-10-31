@@ -53,38 +53,6 @@ public class JDBCManagerUnitTest {
   private static final String NAME_COLUMN_NAME = "name";
   private static final String AGE_COLUMN_NAME = "age";
 
-  public class TestableJDBCManager extends JDBCManager {
-
-    TestableJDBCManager(JDBCConfiguration config) {
-      super(config);
-    }
-
-    @Override
-    protected Connection createConnection(String url, String user, String password)
-        throws SQLException {
-      ResultSet rsKeys = mock(ResultSet.class);
-      when(rsKeys.next()).thenReturn(true, false);
-      when(rsKeys.getString("COLUMN_NAME")).thenReturn(ID_COLUMN_NAME);
-
-      ResultSet rs = mock(ResultSet.class);
-      when(rs.next()).thenReturn(true, false);
-      when(rs.getString("TABLE_NAME")).thenReturn(regionName.toUpperCase());
-
-      DatabaseMetaData metaData = mock(DatabaseMetaData.class);
-      when(metaData.getPrimaryKeys(null, null, regionName.toUpperCase())).thenReturn(rsKeys);
-      when(metaData.getTables(any(), any(), any(), any())).thenReturn(rs);
-
-      preparedStatement = mock(PreparedStatement.class);
-      when(preparedStatement.getUpdateCount()).thenReturn(1);
-
-      connection = mock(Connection.class);
-      when(connection.getMetaData()).thenReturn(metaData);
-      when(connection.prepareStatement(any())).thenReturn(preparedStatement, null);
-
-      return connection;
-    }
-  }
-
   public class TestableUpsertJDBCManager extends JDBCManager {
 
     final int upsertReturn;
@@ -176,11 +144,19 @@ public class JDBCManagerUnitTest {
   @After
   public void tearDown() throws Exception {}
 
-  private void createManager(String driver, String url) {
-    this.mgr = new TestableJDBCManager(createConfiguration(driver, url));
+  private void createManager(String driver, String url) throws SQLException {
+    ResultSet rsKeys = mock(ResultSet.class);
+    when(rsKeys.next()).thenReturn(true, false);
+    when(rsKeys.getString("COLUMN_NAME")).thenReturn(ID_COLUMN_NAME);
+
+    ResultSet rs = mock(ResultSet.class);
+    when(rs.next()).thenReturn(true, false);
+    when(rs.getString("TABLE_NAME")).thenReturn(regionName.toUpperCase());
+
+    this.mgr = new TestableJDBCManagerWithResultSets(createConfiguration(driver, url), rs, rsKeys);
   }
 
-  private void createDefaultManager() {
+  private void createDefaultManager() throws SQLException {
     createManager("java.lang.String", "fakeURL");
   }
 
@@ -327,7 +303,7 @@ public class JDBCManagerUnitTest {
   }
 
   @Test
-  public void verifyMissingDriverClass() {
+  public void verifyMissingDriverClass() throws SQLException {
     createManager("non existent driver", "fakeURL");
     catchException(this.mgr).getConnection(null, null);
     assertThat((Exception) caughtException()).isInstanceOf(IllegalStateException.class);
