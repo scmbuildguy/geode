@@ -41,7 +41,7 @@ import org.apache.geode.test.fake.Fakes;
 import org.apache.geode.test.junit.categories.UnitTest;
 
 @Category(UnitTest.class)
-public class JDBCManagerUnitTestTest {
+public class JDBCManagerUnitTest {
 
   private JDBCManager mgr;
   private String regionName = "jdbcRegion";
