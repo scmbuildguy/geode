@@ -174,7 +174,7 @@ public class JDBCManager {
     return columnNames.append(columnValues).toString();
   }
 
-  Connection getConnection() {
+  Connection getConnection(String user, String password) {
     Connection result = this.conn;
     try {
       if (result != null && !result.isClosed()) {
@@ -194,7 +194,8 @@ public class JDBCManager {
       }
     }
     try {
-      result = createConnection(this.config.getURL());
+      result =
+          createConnection(this.config.getURL(), this.config.getUser(), this.config.getPassword());
     } catch (SQLException e) {
       // TODO: consider a different exception
       throw new IllegalStateException("Could not connect to " + this.config.getURL(), e);
@@ -203,7 +204,8 @@ public class JDBCManager {
     return result;
   }
 
-  protected Connection createConnection(String url) throws SQLException {
+  protected Connection createConnection(String url, String user, String password)
+      throws SQLException {
     return DriverManager.getConnection(url);
   }
 
@@ -253,7 +255,7 @@ public class JDBCManager {
     return getPreparedStatementCache().computeIfAbsent(key, k -> {
       String query = getQueryString(tableName, columnList, operation);
       System.out.println("query=" + query);
-      Connection con = getConnection();
+      Connection con = getConnection(null, null);
       try {
         return con.prepareStatement(query);
       } catch (SQLException e) {
@@ -308,7 +310,7 @@ public class JDBCManager {
 
   String computeKeyColumnName(String tableName) {
     // TODO: check config for key column
-    Connection con = getConnection();
+    Connection con = getConnection(null, null);
     try {
       DatabaseMetaData metaData = con.getMetaData();
       ResultSet tablesRS = metaData.getTables(null, null, "%", null);

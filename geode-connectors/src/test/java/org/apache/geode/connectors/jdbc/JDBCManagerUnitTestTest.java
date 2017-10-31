@@ -60,7 +60,8 @@ public class JDBCManagerUnitTestTest {
     }
 
     @Override
-    protected Connection createConnection(String url) throws SQLException {
+    protected Connection createConnection(String url, String user, String password)
+        throws SQLException {
       ResultSet rsKeys = mock(ResultSet.class);
       when(rsKeys.next()).thenReturn(true, false);
       when(rsKeys.getString("COLUMN_NAME")).thenReturn(ID_COLUMN_NAME);
@@ -99,7 +100,8 @@ public class JDBCManagerUnitTestTest {
     }
 
     @Override
-    protected Connection createConnection(String url) throws SQLException {
+    protected Connection createConnection(String url, String user, String password)
+        throws SQLException {
       ResultSet rsKeys = mock(ResultSet.class);
       when(rsKeys.next()).thenReturn(true, false);
       when(rsKeys.getString("COLUMN_NAME")).thenReturn(ID_COLUMN_NAME);
@@ -138,7 +140,8 @@ public class JDBCManagerUnitTestTest {
     }
 
     @Override
-    protected Connection createConnection(String url) throws SQLException {
+    protected Connection createConnection(String url, String user, String password)
+        throws SQLException {
       if (primaryKeyResults == null) {
         primaryKeyResults = mock(ResultSet.class);
         when(primaryKeyResults.next()).thenReturn(true, false);
@@ -326,7 +329,7 @@ public class JDBCManagerUnitTestTest {
   @Test
   public void verifyMissingDriverClass() {
     createManager("non existent driver", "fakeURL");
-    catchException(this.mgr).getConnection();
+    catchException(this.mgr).getConnection(null, null);
     assertThat((Exception) caughtException()).isInstanceOf(IllegalStateException.class);
     assertThat(caughtException().getMessage())
         .isEqualTo("Driver class \"non existent driver\" not found");

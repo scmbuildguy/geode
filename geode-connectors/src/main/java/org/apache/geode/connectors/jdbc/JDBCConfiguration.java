@@ -39,14 +39,17 @@ public class JDBCConfiguration {
       Collections.unmodifiableList(Arrays.asList(DRIVER, URL));
 
   private final String driver;
-
-  private String url;
+  private final String url;
+  private final String user;
+  private final String password;
 
   JDBCConfiguration(Properties configProps) {
     validateKnownProperties(configProps);
     validateRequiredProperties(configProps);
     this.driver = configProps.getProperty(DRIVER);
     this.url = configProps.getProperty(URL);
+    this.user = configProps.getProperty(USER);
+    this.password = configProps.getProperty(PASSWORD);
   }
 
   private void validateKnownProperties(Properties configProps) {
@@ -72,6 +75,14 @@ public class JDBCConfiguration {
 
   public String getURL() {
     return this.url;
+  }
+
+  public String getUser() {
+    return this.user;
+  }
+
+  public String getPassword() {
+    return this.password;
   }
 
 }
